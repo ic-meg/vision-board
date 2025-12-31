@@ -1,1 +1,58 @@
 @import "tailwindcss";
+
+body {
+	font-family: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text',
+		'Segoe UI', sans-serif;
+}
+
+.app-zoom {
+	transform-origin: top center;
+	transform: none;
+}
+
+.line-clamp-2 {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+}
+
+.line-clamp-3 {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+	overflow: hidden;
+}
+
+/* Auth page typography */
+.auth-page-title {
+	font-family: 'Bebas Neue', system-ui, -apple-system, BlinkMacSystemFont,
+		'Segoe UI', sans-serif;
+	letter-spacing: 0.08em;
+}
+
+.auth-page-brand {
+	font-family: 'Barlow Condensed', system-ui, -apple-system,
+		BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	font-style: italic;
+	font-weight: 400;
+	color: #108006;
+}
+
+.auth-page-primary-btn {
+	background-color: #108006;
+}
+
+.auth-page-primary-btn:hover {
+	background-color: #0b5f04;
+}
+
+.auth-input::placeholder {
+	font-family: 'Barlow Condensed', system-ui, -apple-system,
+		BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	opacity: 0.78;
+}
+
+.auth-bg-overlay {
+	background-color: rgba(0, 0, 0, 0.37);
+}
