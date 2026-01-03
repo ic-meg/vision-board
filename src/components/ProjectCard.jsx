@@ -11,7 +11,7 @@ function renderProgressBar(project) {
       </div>
       <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-200">
         <div
-          className="h-full rounded-full bg-slate-900 transition-all"
+          className="h-full rounded-full bg-emerald-600 transition-all"
           style={{ width: `${percent}%` }}
         />
       </div>
@@ -19,7 +19,7 @@ function renderProgressBar(project) {
   )
 }
 
-function ProjectCard({ project, formatDate, showPhase = false, compact = false, onEdit, onDelete }) {
+function ProjectCard({ project, formatDate, showPhase = false, compact = false, onEdit, onDelete, onOpen }) {
   const assignedMembers = Array.isArray(project.team)
     ? TEAM_MEMBERS.filter(m => project.team.includes(m.id))
     : [];
@@ -34,7 +34,10 @@ function ProjectCard({ project, formatDate, showPhase = false, compact = false, 
   }
 
   return (
-    <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-transform duration-200 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-lg">
+    <article
+      className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-transform duration-200 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-lg cursor-pointer"
+      onClick={() => onOpen && onOpen(project)}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">{project.name}</h3>
@@ -51,7 +54,7 @@ function ProjectCard({ project, formatDate, showPhase = false, compact = false, 
               type="button"
               title="Edit Project"
               className="p-1 rounded hover:bg-slate-100 text-slate-500 hover:text-emerald-600"
-              onClick={() => onEdit && onEdit(project)}
+              onClick={(e) => { e.stopPropagation(); onEdit && onEdit(project); }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                 <path d="M15.58 3.58a2 2 0 0 1 2.83 2.83l-9.19 9.19a2 2 0 0 1-.88.51l-3.3.94a.5.5 0 0 1-.62-.62l.94-3.3a2 2 0 0 1 .51-.88l9.19-9.19zm1.42 1.41a1 1 0 0 0-1.41 0l-.88.88 1.41 1.41.88-.88a1 1 0 0 0 0-1.41z" />
@@ -61,7 +64,7 @@ function ProjectCard({ project, formatDate, showPhase = false, compact = false, 
               type="button"
               title="Delete Project"
               className="p-1 rounded hover:bg-slate-100 text-slate-500 hover:text-red-600"
-              onClick={() => onDelete && onDelete(project)}
+              onClick={(e) => { e.stopPropagation(); onDelete && onDelete(project); }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
                 <path fillRule="evenodd" d="M6.5 4a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1V5H17a1 1 0 1 1 0 2h-1v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7H3a1 1 0 1 1 0-2h2V4zm2 1v9a1 1 0 1 0 2 0V5h-2z" clipRule="evenodd" />

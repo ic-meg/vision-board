@@ -11,13 +11,19 @@ function StatCard({ label, value, icon, accent }) {
 }
 
 function DashboardStats({ stats }) {
+  const items = [
+    { label: 'Total Projects', value: stats.totalProjects, icon: '◎', accent: 'text-sky-500' },
+    { label: 'Total Tasks', value: stats.totalTasks, icon: '⏱', accent: 'text-violet-500' },
+    { label: 'In Progress', value: stats.inProgress, icon: '⧗', accent: 'text-orange-500' },
+    { label: 'Completed', value: stats.completed, icon: '✔', accent: 'text-emerald-500' },
+    { label: 'Overdue', value: stats.overdue, icon: '!', accent: 'text-rose-500' },
+  ]
+
   return (
     <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-      <StatCard label="Total Projects" value={stats.totalProjects} icon="◎" accent="text-sky-500" />
-      <StatCard label="Total Tasks" value={stats.totalTasks} icon="⏱" accent="text-violet-500" />
-      <StatCard label="In Progress" value={stats.inProgress} icon="⧗" accent="text-orange-500" />
-      <StatCard label="Completed" value={stats.completed} icon="✔" accent="text-emerald-500" />
-      <StatCard label="Overdue" value={stats.overdue} icon="!" accent="text-rose-500" />
+      {items.map((item) => (
+        <StatCard key={item.label} {...item} />
+      ))}
     </section>
   )
 }

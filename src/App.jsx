@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import './App.css'
-import AuthPage from './AuthPage'
-import DashboardStats from './DashboardStats'
-import ProjectView from './ProjectView'
-import ProjectCard from './ProjectCard'
-import TaskItem from './TaskItem'
-import ProjectDialog from './ProjectDialog'
-import TaskDialog from './TaskDialog'
+import AuthPage from './components/AuthPage'
+import DashboardStats from './components/DashboardStats'
+import ProjectView from './components/ProjectView'
+import TaskView from './components/TaskView'
+import ProjectTasksView from './components/ProjectTasksView'
+import ProjectCard from './components/ProjectCard'
+import TaskItem from './components/TaskItem'
+import ProjectDialog from './components/ProjectDialog'
+import TaskDialog from './components/TaskDialog'
 
 const initialProjects = [
   {
@@ -95,8 +97,14 @@ function App() {
   const [tasks, setTasks] = useState(initialTasks)
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false)
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState(null)
   const [projectSearch, setProjectSearch] = useState('')
+  const [taskSearch, setTaskSearch] = useState('')
   const [editingProject, setEditingProject] = useState(null)
+  const [selectedProjectId, setSelectedProjectId] = useState(null)
+  const [projectTaskSearch, setProjectTaskSearch] = useState('')
+  const [projectStatusFilter, setProjectStatusFilter] = useState('all')
+  const [projectPriorityFilter, setProjectPriorityFilter] = useState('all')
 
   const stats = useMemo(() => {
     const totalProjects = projects.length
@@ -153,6 +161,11 @@ function App() {
     }
   }
 
+  function openProjectTasks(project) {
+    setSelectedProjectId(project.id)
+    setActiveTab('projectTasks')
+  }
+
   function handleCreateTask(input) {
     const title = input.title.trim()
     if (!title) return
@@ -162,13 +175,36 @@ function App() {
     const task = {
       id: nextId,
       title,
+      description: input.description || '',
       projectId: input.projectId,
       dueDate: input.dueDate || new Date().toISOString().slice(0, 10),
-      status: 'open',
+      status: input.status || 'open',
+      priority: input.priority || 'medium',
+      assigneeId: input.assigneeId,
     }
 
     setTasks((prev) => [...prev, task])
     setIsTaskDialogOpen(false)
+    setEditingTask(null)
+  }
+
+  function handleEditTask(task) {
+    setEditingTask(task)
+    setIsTaskDialogOpen(true)
+  }
+
+  function handleUpdateTask(updated) {
+    setTasks((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)))
+    setIsTaskDialogOpen(false)
+    setEditingTask(null)
+  }
+
+  function backToProjects() {
+    setSelectedProjectId(null)
+    setProjectTaskSearch('')
+    setProjectStatusFilter('all')
+    setProjectPriorityFilter('all')
+    setActiveTab('projects')
   }
 
   const upcomingDeadlines = useMemo(() => {
@@ -195,6 +231,30 @@ function App() {
     })
   }, [projects, projectSearch])
 
+  const filteredTasks = useMemo(() => {
+    const query = taskSearch.trim().toLowerCase()
+    if (!query) return tasks
+    return tasks.filter((task) => `${task.title}`.toLowerCase().includes(query))
+  }, [tasks, taskSearch])
+
+  const selectedProject = useMemo(() => {
+    return selectedProjectId ? projectsById.get(selectedProjectId) : null
+  }, [selectedProjectId, projectsById])
+
+  const projectTasks = useMemo(() => {
+    if (!selectedProjectId) return []
+    const base = tasks.filter((t) => t.projectId === selectedProjectId && t.status !== 'completed')
+    const q = projectTaskSearch.trim().toLowerCase()
+    const searched = q ? base.filter((t) => `${t.title}`.toLowerCase().includes(q)) : base
+    if (projectStatusFilter === 'all') return searched
+    if (projectStatusFilter === 'todo') return searched.filter((t) => t.status === 'open' || t.status === 'todo')
+    if (projectStatusFilter === 'in-progress') return searched.filter((t) => t.status === 'in-progress')
+    const statusFiltered = searched
+    // Apply priority filter on top
+    if (projectPriorityFilter === 'all') return statusFiltered
+    return statusFiltered.filter((t) => (t.priority || 'medium') === projectPriorityFilter)
+  }, [tasks, selectedProjectId, projectTaskSearch, projectStatusFilter, projectPriorityFilter])
+
   if (!isAuthenticated) {
     return (
       <AuthPage
@@ -204,8 +264,11 @@ function App() {
     )
   }
 
+  // Background is fixed to theme gradient
+  const bgClass = 'app-background-gradient'
+
   return (
-    <div className="app-zoom min-h-screen bg-slate-50 text-slate-900">
+    <div className={`app-zoom min-h-screen bg-white ${bgClass} text-slate-900`}>
       <div className="mx-auto max-w-6xl px-6 pb-12 pt-8">
         <header className="mb-8 flex items-center justify-between">
           <div>
@@ -216,25 +279,25 @@ function App() {
               Manage your projects and tasks efficiently
             </p>
           </div>
-          <button
+          <div className="flex items-center gap-3">
+            <button
             type="button"
             onClick={() => setIsProjectDialogOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-300 px-4 py-2 text-sm font-medium text-emerald-900 shadow-sm hover:bg-emerald-400"
           >
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold">
-              +
-            </span>
+            <span className="text-base font-semibold">+</span>
             New Project
-          </button>
+            </button>
+          </div>
         </header>
 
         <div className="mb-6 flex items-center gap-2 text-sm">
           <button
             type="button"
             onClick={() => setActiveTab('dashboard')}
-            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium ${activeTab === 'dashboard' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 border border-slate-200'}`}
+            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium ${activeTab === 'dashboard' ? 'bg-black text-white' : 'bg-white text-black border border-black'}`}
           >
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-800 text-[11px]">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-black text-[11px]">
               ⌘
             </span>
             Dashboard
@@ -242,12 +305,22 @@ function App() {
           <button
             type="button"
             onClick={() => setActiveTab('projects')}
-            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium ${activeTab === 'projects' ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 border border-slate-200'}`}
+            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium ${activeTab === 'projects' ? 'bg-black text-white' : 'bg-white text-black border border-black'}`}
           >
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[11px] text-slate-700">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50 text-[11px] text-emerald-700">
               📁
             </span>
             Projects
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('tasks')}
+            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium ${activeTab === 'tasks' ? 'bg-black text-white' : 'bg-white text-black border border-black'}`}
+          >
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50 text-[11px] text-emerald-700">
+              ✅
+            </span>
+            All Tasks
           </button>
         </div>
 
@@ -268,6 +341,7 @@ function App() {
                     compact
                     onEdit={handleEditProject}
                     onDelete={handleDeleteProject}
+                    onOpen={openProjectTasks}
                   />
                 ))}
               </div>
@@ -292,7 +366,7 @@ function App() {
                 <button
                   type="button"
                   onClick={() => setIsTaskDialogOpen(true)}
-                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  className="rounded-full border border-black px-3 py-1 text-xs font-medium text-black hover:bg-emerald-50"
                 >
                   + New Task
                 </button>
@@ -312,7 +386,7 @@ function App() {
               </div>
             </section>
           </>
-        ) : (
+        ) : activeTab === 'projects' ? (
           <ProjectView
             projects={filteredProjects}
             formatDate={formatDate}
@@ -320,8 +394,35 @@ function App() {
             onSearchChange={setProjectSearch}
             onEdit={handleEditProject}
             onDelete={handleDeleteProject}
+            onOpen={openProjectTasks}
           />
-        )}
+        ) : activeTab === 'tasks' ? (
+          <TaskView
+            tasks={filteredTasks}
+            projectsById={projectsById}
+            formatDate={formatDate}
+            searchTerm={taskSearch}
+            onSearchChange={setTaskSearch}
+            onNewTask={() => setIsTaskDialogOpen(true)}
+            onEditTask={handleEditTask}
+          />
+        ) : activeTab === 'projectTasks' && selectedProject ? (
+          <ProjectTasksView
+            project={selectedProject}
+            tasks={projectTasks}
+            projectsById={projectsById}
+            formatDate={formatDate}
+            searchTerm={projectTaskSearch}
+            statusFilter={projectStatusFilter}
+            onSearchChange={setProjectTaskSearch}
+            onStatusChange={setProjectStatusFilter}
+            priorityFilter={projectPriorityFilter}
+            onPriorityChange={setProjectPriorityFilter}
+            onNewTask={() => setIsTaskDialogOpen(true)}
+            onEditTask={handleEditTask}
+            onBack={backToProjects}
+          />
+        ) : null}
       </div>
       <ProjectDialog
         isOpen={isProjectDialogOpen}
@@ -333,6 +434,8 @@ function App() {
         isOpen={isTaskDialogOpen}
         onClose={() => setIsTaskDialogOpen(false)}
         onCreate={handleCreateTask}
+        onUpdate={handleUpdateTask}
+        editingTask={editingTask}
         projects={projects}
       />
     </div>

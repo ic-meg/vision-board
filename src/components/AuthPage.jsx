@@ -4,23 +4,19 @@ function AuthPage({ initialMode = 'signin', onAuthenticated }) {
   const [mode, setMode] = useState(initialMode)
   const [form, setForm] = useState({ name: '', email: '', password: '' })
 
-  function handleChange(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }))
-  }
+  const { name, email, password } = form
+  const isSignIn = mode === 'signin'
+
+  const inputClass = 'auth-input w-full rounded-full border border-slate-300 px-5 py-3.5 text-base text-slate-800 shadow-sm outline-none focus:border-emerald-500'
+
+  const onField = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
 
   function handleSubmit(event) {
     event.preventDefault()
-    if (!form.email.trim() || !form.password.trim()) return
+    if (!email.trim() || !password.trim()) return
 
-    // For this activity we just pretend to authenticate
-    onAuthenticated?.({
-      mode,
-      name: form.name.trim(),
-      email: form.email.trim(),
-    })
+    onAuthenticated?.({ mode, name: name.trim(), email: email.trim() })
   }
-
-  const isSignIn = mode === 'signin'
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -38,24 +34,24 @@ function AuthPage({ initialMode = 'signin', onAuthenticated }) {
             </p>
 
             <form onSubmit={handleSubmit} className="mt-12 space-y-5">
-              {!isSignIn ? (
+              {!isSignIn && (
                 <div>
                   <input
                     type="text"
                     placeholder="Name"
-                    value={form.name}
-                    onChange={(event) => handleChange('name', event.target.value)}
-                    className="auth-input w-full rounded-full border border-slate-300 px-5 py-3.5 text-base text-slate-800 shadow-sm outline-none focus:border-emerald-500"
+                    value={name}
+                    onChange={onField('name')}
+                    className={inputClass}
                   />
                 </div>
-              ) : null}
+              )}
               <div>
                 <input
                   type="email"
                   placeholder="Email Address"
-                  value={form.email}
-                  onChange={(event) => handleChange('email', event.target.value)}
-                  className="auth-input w-full rounded-full border border-slate-300 px-5 py-3.5 text-base text-slate-800 shadow-sm outline-none focus:border-emerald-500"
+                  value={email}
+                  onChange={onField('email')}
+                  className={inputClass}
                   required
                 />
               </div>
@@ -63,9 +59,9 @@ function AuthPage({ initialMode = 'signin', onAuthenticated }) {
                 <input
                   type="password"
                   placeholder="Password"
-                  value={form.password}
-                  onChange={(event) => handleChange('password', event.target.value)}
-                  className="auth-input w-full rounded-full border border-slate-300 px-5 py-3.5 text-base text-slate-800 shadow-sm outline-none focus:border-emerald-500"
+                  value={password}
+                  onChange={onField('password')}
+                  className={inputClass}
                   required
                 />
               </div>

@@ -33,9 +33,9 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject }) {
 
   if (!isOpen) return null
 
-  function handleChange(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }))
-  }
+  const { name, description, status, startDate, endDate, team, progress } = form
+  const inputClass = 'mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-900'
+  const onField = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
 
   function handleToggleMember(id) {
     setForm((prev) => {
@@ -78,9 +78,9 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject }) {
             <label className="text-xs font-medium text-slate-700">Project Name</label>
             <input
               type="text"
-              value={form.name}
-              onChange={(event) => handleChange('name', event.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none ring-0 focus:border-slate-900"
+              value={name}
+              onChange={onField('name')}
+              className={inputClass}
               placeholder="e.g. New Website Launch"
               required
             />
@@ -88,9 +88,9 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject }) {
           <div>
             <label className="text-xs font-medium text-slate-700">Description</label>
             <textarea
-              value={form.description}
-              onChange={(event) => handleChange('description', event.target.value)}
-              className="mt-1 w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-900"
+              value={description}
+              onChange={onField('description')}
+              className={`${inputClass} resize-none`}
               rows={3}
               placeholder="Enter project description"
             />
@@ -98,9 +98,9 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject }) {
           <div>
             <label className="text-xs font-medium text-slate-700">Status</label>
             <select
-              value={form.status}
-              onChange={(event) => handleChange('status', event.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-900"
+              value={status}
+              onChange={onField('status')}
+              className={inputClass}
             >
               <option value="planning">Planning</option>
               <option value="active">Active</option>
@@ -112,10 +112,10 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject }) {
               <label className="text-xs font-medium text-slate-700">Start Date *</label>
               <input
                 type="date"
-                value={form.startDate}
-                onChange={(event) => handleChange('startDate', event.target.value)}
+                value={startDate}
+                onChange={onField('startDate')}
                 placeholder="mm/dd/yyyy"
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-900"
+                className={inputClass}
                 required
               />
             </div>
@@ -123,24 +123,24 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject }) {
               <label className="text-xs font-medium text-slate-700">End Date *</label>
               <input
                 type="date"
-                value={form.endDate}
-                onChange={(event) => handleChange('endDate', event.target.value)}
+                value={endDate}
+                onChange={onField('endDate')}
                 placeholder="mm/dd/yyyy"
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-900"
+                className={inputClass}
                 required
               />
             </div>
           </div>
           {/* Progress slider */}
           <div className="mb-2 flex items-center gap-4">
-            <label className="text-xs font-medium text-slate-700 whitespace-nowrap">Progress: {form.progress}%</label>
+            <label className="text-xs font-medium text-slate-700 whitespace-nowrap">Progress: {progress}%</label>
             <input
               type="range"
               min="0"
               max="100"
               step="1"
-              value={form.progress}
-              onChange={e => handleChange('progress', Number(e.target.value))}
+              value={progress}
+              onChange={(e) => setForm((prev) => ({ ...prev, progress: Number(e.target.value) }))}
               className="flex-1 h-2 rounded-lg outline-none focus:outline-none bg-gray-200"
               style={{
                 accentColor: '#1976d2',
@@ -151,16 +151,19 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject }) {
           </div>
           {/* Team member assignment UI */}
           <div>
-            <label className="text-xs font-medium text-slate-700 mb-1 block">Assign Team Members ({form.team.length} selected)</label>
+            <label className="text-xs font-medium text-slate-700 mb-1 block">Assign Team Members ({team.length} selected)</label>
             <div className="grid grid-cols-2 gap-2">
               {TEAM_MEMBERS.map((member) => {
-                const selected = form.team.includes(member.id)
+                const selected = team.includes(member.id)
+                const cls = selected
+                  ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200'
+                  : 'border-slate-200 bg-white hover:bg-slate-50'
                 return (
                   <button
                     type="button"
                     key={member.id}
                     onClick={() => handleToggleMember(member.id)}
-                    className={`flex items-center gap-3 rounded-xl border px-3 py-2 transition-all text-left ${selected ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
+                    className={`flex items-center gap-3 rounded-xl border px-3 py-2 transition-all text-left ${cls}`}
                   >
                     <img src={member.avatar} alt={member.name} className="h-10 w-10 rounded-full object-cover border border-slate-200" />
                     <div className="flex-1">
