@@ -1,9 +1,8 @@
 import { TEAM_MEMBERS } from './teamMembers'
 function renderProgressBar(project) {
-  // Use progress field if available, else fallback to tasks
-  const percent = typeof project.progress === 'number'
-    ? project.progress
-    : (project.tasksTotal === 0 ? 0 : (project.tasksCompleted / project.tasksTotal) * 100);
+  const total = project.tasksTotal || 0
+  const completed = project.tasksCompleted || 0
+  const percent = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0
   return (
     <div className="mt-3">
       <div className="flex justify-between text-xs text-slate-500">
@@ -26,11 +25,11 @@ function ProjectCard({ project, formatDate, showPhase = false, compact = false, 
   const status = project.status || 'active'
   let badgeClass = 'bg-slate-100 text-slate-700'
   if (status === 'active') {
-    badgeClass = 'bg-emerald-100 text-emerald-700'
-  } else if (status === 'planning') {
     badgeClass = 'bg-blue-100 text-blue-700'
   } else if (status === 'completed') {
-    badgeClass = 'bg-slate-100 text-slate-800'
+    badgeClass = 'bg-emerald-600 text-white'
+  } else if (status === 'overdue') {
+    badgeClass = 'bg-red-100 text-red-700'
   }
 
   return (
@@ -94,7 +93,7 @@ function ProjectCard({ project, formatDate, showPhase = false, compact = false, 
           <span>📅</span>
           <span>{formatDate(project.dueDate)}</span>
         </div>
-        {showPhase ? <span>Phase: {project.phase}</span> : <span>{project.tasksCompleted} completed</span>}
+        <span>{project.tasksCompleted} completed</span>
       </div>
     </article>
   )

@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
-import { TEAM_MEMBERS } from './teamMembers'
 
-function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask }) {
+function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask, defaultProjectId, teamMembers }) {
   const [form, setForm] = useState({
     title: '',
     description: '',
     status: 'todo',
     priority: 'medium',
     assigneeId: '',
-    projectId: projects[0]?.id ?? '',
+    projectId: defaultProjectId ?? projects[0]?.id ?? '',
     dueDate: '',
   })
+
+  const [error, setError] = useState('')
 
   useEffect(() => {
     if (!isOpen) {
@@ -20,9 +21,10 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
         status: 'todo',
         priority: 'medium',
         assigneeId: '',
-        projectId: projects[0]?.id ?? '',
+        projectId: defaultProjectId ?? projects[0]?.id ?? '',
         dueDate: '',
       })
+      setError('')
       return
     }
     if (editingTask) {
@@ -32,7 +34,7 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
         status: editingTask.status || 'todo',
         priority: editingTask.priority || 'medium',
         assigneeId: editingTask.assigneeId ?? '',
-        projectId: editingTask.projectId ?? projects[0]?.id ?? '',
+        projectId: editingTask.projectId ?? defaultProjectId ?? projects[0]?.id ?? '',
         dueDate: editingTask.dueDate || '',
         id: editingTask.id,
       })
@@ -43,11 +45,12 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
         status: 'todo',
         priority: 'medium',
         assigneeId: '',
-        projectId: projects[0]?.id ?? '',
+        projectId: defaultProjectId ?? projects[0]?.id ?? '',
         dueDate: '',
       })
+      setError('')
     }
-  }, [isOpen, projects, editingTask])
+  }, [isOpen, projects, editingTask, defaultProjectId])
 
   if (!isOpen) return null
 
@@ -56,9 +59,24 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
   const onField = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
   const isEdit = !!editingTask
 
+  const selectedProject = projects.find((p) => p.id === Number(projectId))
+  const availableAssignees = teamMembers || []
+
   function handleSubmit(event) {
     event.preventDefault()
     if (!title.trim() || !projectId) return
+
+    if (selectedProject && dueDate) {
+      const projectDeadline = selectedProject.dueDate
+        ? String(selectedProject.dueDate).slice(0, 10)
+        : ''
+      if (projectDeadline && dueDate > projectDeadline) {
+        setError('Task deadline cannot be after the project deadline.')
+        return
+      }
+    }
+
+    setError('')
     const payload = {
       id,
       title: title.trim(),
@@ -108,10 +126,11 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
                 value={status}
                 onChange={onField('status')}
                 className={inputClass}
+                disabled={status === 'completed'}
               >
                 <option value="todo">To Do</option>
                 <option value="in-progress">In Progress</option>
-                <option value="completed">Completed</option>
+                {status === 'completed' && <option value="completed">Completed</option>}
               </select>
             </div>
             <div>
@@ -136,7 +155,7 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
               className={inputClass}
             >
               <option value="">Select user</option>
-              {TEAM_MEMBERS.map((member) => (
+              {availableAssignees.map((member) => (
                 <option key={member.id} value={member.id}>{member.name}</option>
               ))}
             </select>
@@ -147,7 +166,7 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
               <label className="text-xs font-medium text-slate-700">Project</label>
               <select
                 value={projectId}
-                onChange={onField('projectId')}
+                onChange={(e) => setForm((prev) => ({ ...prev, projectId: e.target.value, assigneeId: '' }))}
                 className={inputClass}
               >
                 {projects.map((project) => (
@@ -167,6 +186,10 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
               />
             </div>
           </div>
+
+          {error && (
+            <p className="text-xs text-red-600 mt-1 text-right">{error}</p>
+          )}
 
           <div className="mt-4 flex justify-end gap-2 text-sm">
             <button

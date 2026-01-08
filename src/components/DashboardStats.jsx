@@ -14,8 +14,8 @@ function DashboardStats({ stats }) {
   const items = [
     { label: 'Total Projects', value: stats.totalProjects, icon: '◎', accent: 'text-sky-500' },
     { label: 'Total Tasks', value: stats.totalTasks, icon: '⏱', accent: 'text-violet-500' },
-    { label: 'In Progress', value: stats.inProgress, icon: '⧗', accent: 'text-orange-500' },
-    { label: 'Completed', value: stats.completed, icon: '✔', accent: 'text-emerald-500' },
+    { label: 'Project Completed', value: stats.projectCompleted ?? stats.completed, icon: '🏁', accent: 'text-orange-500' },
+    { label: 'Task Completed', value: stats.taskCompleted ?? 0, icon: '✔', accent: 'text-emerald-500' },
     { label: 'Overdue', value: stats.overdue, icon: '!', accent: 'text-rose-500' },
   ]
 

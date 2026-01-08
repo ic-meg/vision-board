@@ -1,7 +1,6 @@
 import TaskItem from './TaskItem'
-import { TEAM_MEMBERS } from './teamMembers'
 
-function TaskView({ tasks, projectsById, formatDate, searchTerm, onSearchChange, onNewTask, onEditTask }) {
+function TaskView({ tasks, projectsById, formatDate, searchTerm, onSearchChange, onNewTask, onEditTask, onDeleteTask, onToggleTaskComplete, teamMembers }) {
   const hasTasks = tasks?.length > 0
   const inputWrap = 'w-full rounded-xl border border-transparent bg-slate-100 px-4 py-2.5 text-sm text-slate-700 shadow-sm focus-within:border-slate-300 focus-within:bg-white'
   const inputClass = 'w-full border-none bg-transparent text-sm text-slate-700 placeholder:text-slate-400 outline-none'
@@ -28,7 +27,7 @@ function TaskView({ tasks, projectsById, formatDate, searchTerm, onSearchChange,
         <div className="space-y-3">
           {tasks.map((task) => {
             const project = projectsById.get(task.projectId)
-            const assignee = task.assigneeId ? TEAM_MEMBERS.find((m) => m.id === task.assigneeId) : null
+            const assignee = task.assigneeId ? teamMembers?.find((m) => m.id === task.assigneeId) : null
             return (
               <TaskItem
                 key={task.id}
@@ -37,6 +36,8 @@ function TaskView({ tasks, projectsById, formatDate, searchTerm, onSearchChange,
                 formatDate={formatDate}
                 assignee={assignee || undefined}
                 onEdit={() => onEditTask?.(task)}
+                onDelete={onDeleteTask ? () => onDeleteTask(task) : undefined}
+                onToggleComplete={onToggleTaskComplete ? () => onToggleTaskComplete(task) : undefined}
               />
             )
           })}

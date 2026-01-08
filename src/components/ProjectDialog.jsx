@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
-import { TEAM_MEMBERS } from './teamMembers'
 
-function ProjectDialog({ isOpen, onClose, onCreate, editingProject }) {
+function ProjectDialog({ isOpen, onClose, onCreate, editingProject, allMembers, onAddMember, onUpdateMember, onDeleteMember }) {
   const [form, setForm] = useState({
     name: '',
     description: '',
-    status: 'planning',
     startDate: '',
     endDate: '',
     team: [],
-    progress: 0,
   })
+
+  const [newMemberName, setNewMemberName] = useState('')
+  const [newMemberRole, setNewMemberRole] = useState('')
+  const [editingMemberId, setEditingMemberId] = useState(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -18,22 +19,20 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject }) {
         setForm({
           name: editingProject.name || '',
           description: editingProject.description || '',
-          status: editingProject.status || 'planning',
           startDate: editingProject.startDate || '',
           endDate: editingProject.endDate || '',
           id: editingProject.id,
           team: editingProject.team || [],
-          progress: editingProject.progress ?? 0,
         })
       } else {
-        setForm({ name: '', description: '', status: 'planning', startDate: '', endDate: '', team: [], progress: 0 })
+        setForm({ name: '', description: '', startDate: '', endDate: '', team: [] })
       }
     }
   }, [isOpen, editingProject])
 
   if (!isOpen) return null
 
-  const { name, description, status, startDate, endDate, team, progress } = form
+  const { name, description, startDate, endDate, team } = form
   const inputClass = 'mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-900'
   const onField = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
 
@@ -52,11 +51,25 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject }) {
     onCreate(form)
   }
 
+  function handleAddMember() {
+    const name = newMemberName.trim()
+    if (!name) return
+    const role = newMemberRole.trim() || 'Member'
+    if (editingMemberId) {
+      onUpdateMember?.({ id: editingMemberId, name, role })
+    } else {
+      onAddMember?.({ name, role })
+    }
+    setNewMemberName('')
+    setNewMemberRole('')
+    setEditingMemberId(null)
+  }
+
   const isEdit = !!editingProject
 
   return (
     <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+      <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-base font-semibold text-slate-900">{isEdit ? 'Edit Project' : 'Create New Project'}</h2>
@@ -96,86 +109,101 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject }) {
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-700">Status</label>
-            <select
-              value={status}
-              onChange={onField('status')}
-              className={inputClass}
-            >
-              <option value="planning">Planning</option>
-              <option value="active">Active</option>
-              <option value="completed">Completed</option>
-            </select>
-          </div>
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="text-xs font-medium text-slate-700">Start Date *</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={onField('startDate')}
-                placeholder="mm/dd/yyyy"
-                className={inputClass}
-                required
-              />
-            </div>
-            <div className="flex-1">
-              <label className="text-xs font-medium text-slate-700">End Date *</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={onField('endDate')}
-                placeholder="mm/dd/yyyy"
-                className={inputClass}
-                required
-              />
-            </div>
-          </div>
-          {/* Progress slider */}
-          <div className="mb-2 flex items-center gap-4">
-            <label className="text-xs font-medium text-slate-700 whitespace-nowrap">Progress: {progress}%</label>
+            <label className="text-xs font-medium text-slate-700">Deadline *</label>
             <input
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              value={progress}
-              onChange={(e) => setForm((prev) => ({ ...prev, progress: Number(e.target.value) }))}
-              className="flex-1 h-2 rounded-lg outline-none focus:outline-none bg-gray-200"
-              style={{
-                accentColor: '#1976d2',
-                height: '6px',
-                marginTop: '0',
-              }}
+              type="date"
+              value={endDate}
+              onChange={onField('endDate')}
+              placeholder="mm/dd/yyyy"
+              className={inputClass}
+              required
             />
           </div>
           {/* Team member assignment UI */}
           <div>
             <label className="text-xs font-medium text-slate-700 mb-1 block">Assign Team Members ({team.length} selected)</label>
+            {onAddMember && (
+              <div className="mb-2 flex gap-2 text-xs">
+                <input
+                  type="text"
+                  placeholder="New member name"
+                  value={newMemberName}
+                  onChange={(e) => setNewMemberName(e.target.value)}
+                  className="flex-1 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-900"
+                />
+                <input
+                  type="text"
+                  placeholder="Role (optional)"
+                  value={newMemberRole}
+                  onChange={(e) => setNewMemberRole(e.target.value)}
+                  className="w-32 rounded-lg border border-slate-200 px-2 py-1 outline-none focus:border-slate-900"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddMember}
+                  className="rounded-lg bg-emerald-500 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-600"
+                >
+                  {editingMemberId ? 'Save' : 'Add'}
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
-              {TEAM_MEMBERS.map((member) => {
+              {(allMembers || []).map((member) => {
                 const selected = team.includes(member.id)
                 const cls = selected
                   ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200'
                   : 'border-slate-200 bg-white hover:bg-slate-50'
                 return (
-                  <button
-                    type="button"
+                  <div
                     key={member.id}
                     onClick={() => handleToggleMember(member.id)}
-                    className={`flex items-center gap-3 rounded-xl border px-3 py-2 transition-all text-left ${cls}`}
+                    className={`relative flex items-center gap-3 rounded-xl border px-3 py-2 transition-all text-left cursor-pointer ${cls}`}
                   >
+                    {selected && (
+                      <span className="absolute -right-1 -top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-[11px] font-semibold text-white shadow-md ring-4 ring-emerald-300/40">
+                        ✓
+                      </span>
+                    )}
                     <img src={member.avatar} alt={member.name} className="h-10 w-10 rounded-full object-cover border border-slate-200" />
                     <div className="flex-1">
                       <div className="font-medium text-slate-900 text-sm">{member.name}</div>
                       <div className="text-xs text-slate-500">{member.role}</div>
                     </div>
-                    {selected && (
-                      <span className="ml-2 text-emerald-600">
-                        <svg width="22" height="22" fill="none" viewBox="0 0 22 22"><circle cx="11" cy="11" r="11" fill="#10B981" fillOpacity="0.15"/><path d="M7 11.5l3 3 5-6" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </span>
-                    )}
-                  </button>
+                    <div className="ml-2 flex items-center gap-1 text-xs">
+                      {onUpdateMember && (
+                        <button
+                          type="button"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-slate-400 shadow-sm ring-1 ring-slate-200 hover:text-emerald-600 hover:bg-emerald-50"
+                          title="Edit member"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEditingMemberId(member.id)
+                            setNewMemberName(member.name)
+                            setNewMemberRole(member.role || '')
+                          }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                            <path d="M15.58 3.58a2 2 0 0 1 2.83 2.83l-9.19 9.19a2 2 0 0 1-.88.51l-3.3.94a.5.5 0 0 1-.62-.62l.94-3.3a2 2 0 0 1 .51-.88l9.19-9.19zm1.42 1.41a1 1 0 0 0-1.41 0l-.88.88 1.41 1.41.88-.88a1 1 0 0 0 0-1.41z" />
+                          </svg>
+                        </button>
+                      )}
+                      {onDeleteMember && (
+                        <button
+                          type="button"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-slate-400 shadow-sm ring-1 ring-slate-200 hover:text-red-600 hover:bg-red-50"
+                          title="Remove member"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onDeleteMember(member.id)
+                          }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                            <path fillRule="evenodd" d="M6.5 4a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1V5H17a1 1 0 1 1 0 2h-1v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7H3a1 1 0 1 1 0-2h2V4zm2 1v9a1 1 0 1 0 2 0V5h-2z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 )
               })}
             </div>

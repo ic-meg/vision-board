@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { signUp, signIn } from '../api/client'
 
 function AuthPage({ initialMode = 'signin', onAuthenticated }) {
   const [mode, setMode] = useState(initialMode)
   const [form, setForm] = useState({ name: '', email: '', password: '' })
+  const [error, setError] = useState('')
 
   const { name, email, password } = form
   const isSignIn = mode === 'signin'
@@ -11,11 +13,37 @@ function AuthPage({ initialMode = 'signin', onAuthenticated }) {
 
   const onField = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     if (!email.trim() || !password.trim()) return
 
-    onAuthenticated?.({ mode, name: name.trim(), email: email.trim() })
+    if (isSignIn) {
+      try {
+        const user = await signIn({
+          email: email.trim(),
+          passwordHash: password,
+        })
+        setError('')
+        onAuthenticated?.({ mode, ...user })
+      } catch (err) {
+        console.error('Sign in failed', err)
+        // Extract the specific error message from the backend
+        setError(err.message || 'Sign in failed')
+      }
+    } else {
+      try {
+        const user = await signUp({
+          name: name.trim(),
+          email: email.trim(),
+          passwordHash: password, // or send plain and hash on backend
+        })
+        setError('')
+        onAuthenticated?.({ mode, ...user })
+      } catch (err) {
+        console.error('Sign up failed', err)
+        setError('Could not create account')
+      }
+    }
   }
 
   return (
@@ -38,12 +66,15 @@ function AuthPage({ initialMode = 'signin', onAuthenticated }) {
                 <div>
                   <input
                     type="text"
-                    placeholder="Name"
+                    placeholder="Username"
                     value={name}
                     onChange={onField('name')}
                     className={inputClass}
                   />
                 </div>
+              )}
+              {error && (
+                <p className="text-sm text-red-600 text-center">{error}</p>
               )}
               <div>
                 <input

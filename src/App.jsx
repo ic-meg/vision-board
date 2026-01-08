@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import AuthPage from './components/AuthPage'
 import DashboardStats from './components/DashboardStats'
@@ -9,77 +9,21 @@ import ProjectCard from './components/ProjectCard'
 import TaskItem from './components/TaskItem'
 import ProjectDialog from './components/ProjectDialog'
 import TaskDialog from './components/TaskDialog'
+import AccountDialog from './components/AccountDialog'
+import { fetchProjects, fetchTasks, createProject, updateProject, deleteProject, createTask, updateTask, deleteTask, updateAccount, deleteAccount } from './api/client'
+import { TEAM_MEMBERS as DEFAULT_TEAM_MEMBERS } from './components/teamMembers'
 
-const initialProjects = [
-  {
-    id: 1,
-    name: 'Website Redesign',
-    description: 'Complete overhaul of company website with modern UI/UX',
-    status: 'active',
-    phase: 'execution',
-    dueDate: '2025-02-15',
-    tasksTotal: 3,
-    tasksCompleted: 1,
-  },
-  {
-    id: 2,
-    name: 'Mobile App Development',
-    description: 'Build cross-platform mobile app for iOS and Android',
-    status: 'planning',
-    phase: 'planning',
-    dueDate: '2025-03-30',
-    tasksTotal: 2,
-    tasksCompleted: 1,
-  },
-  {
-    id: 3,
-    name: 'Marketing Campaign',
-    description: 'Q1 marketing campaign planning and execution',
-    status: 'active',
-    phase: 'execution',
-    dueDate: '2025-01-31',
-    tasksTotal: 2,
-    tasksCompleted: 0,
-  },
-]
+function normalizeTask(task) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const due = new Date(task.dueDate)
+  due.setHours(0, 0, 0, 0)
 
-const initialTasks = [
-  {
-    id: 1,
-    title: 'Create social media content calendar',
-    projectId: 3,
-    dueDate: '2025-01-05',
-    status: 'overdue',
-  },
-  {
-    id: 2,
-    title: 'Implement responsive navigation',
-    projectId: 1,
-    dueDate: '2025-01-25',
-    status: 'overdue',
-  },
-  {
-    id: 3,
-    title: 'Design email templates',
-    projectId: 3,
-    dueDate: '2025-01-28',
-    status: 'overdue',
-  },
-  {
-    id: 4,
-    title: 'Set up content management system',
-    projectId: 1,
-    dueDate: '2025-02-01',
-    status: 'overdue',
-  },
-  {
-    id: 5,
-    title: 'Design app wireframes',
-    projectId: 2,
-    dueDate: '2025-02-05',
-    status: 'overdue',
-  },
-]
+  const baseStatus = task.status === 'in_progress' ? 'in-progress' : task.status
+  const isOverdue = baseStatus !== 'completed' && due < today
+
+  return { ...task, status: isOverdue ? 'overdue' : baseStatus }
+}
 
 function formatDate(dateString) {
   const date = new Date(dateString)
@@ -91,12 +35,21 @@ function formatDate(dateString) {
 }
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [authUser, setAuthUser] = useState(() => {
+    try {
+      const stored = window.localStorage.getItem('authUser')
+      return stored ? JSON.parse(stored) : null
+    } catch {
+      return null
+    }
+  })
+  const isAuthenticated = !!authUser
   const [activeTab, setActiveTab] = useState('dashboard')
-  const [projects, setProjects] = useState(initialProjects)
-  const [tasks, setTasks] = useState(initialTasks)
+  const [projects, setProjects] = useState([])
+  const [tasks, setTasks] = useState([])
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false)
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false)
+  const [isAccountDialogOpen, setIsAccountDialogOpen] = useState(false)
   const [editingTask, setEditingTask] = useState(null)
   const [projectSearch, setProjectSearch] = useState('')
   const [taskSearch, setTaskSearch] = useState('')
@@ -105,43 +58,175 @@ function App() {
   const [projectTaskSearch, setProjectTaskSearch] = useState('')
   const [projectStatusFilter, setProjectStatusFilter] = useState('all')
   const [projectPriorityFilter, setProjectPriorityFilter] = useState('all')
+  const [teamMembers, setTeamMembers] = useState(() => {
+    try {
+      const stored = window.localStorage.getItem('teamMembers')
+      return stored ? JSON.parse(stored) : DEFAULT_TEAM_MEMBERS
+    } catch {
+      return DEFAULT_TEAM_MEMBERS
+    }
+  })
+
+  function loadProjectTeams() {
+    try {
+      const stored = window.localStorage.getItem('projectTeams')
+      return stored ? JSON.parse(stored) : {}
+    } catch {
+      return {}
+    }
+  }
+
+  function loadTaskAssignees() {
+    try {
+      const stored = window.localStorage.getItem('taskAssignees')
+      return stored ? JSON.parse(stored) : {}
+    } catch {
+      return {}
+    }
+  }
+
+  function persistTaskAssignees(map) {
+    try {
+      window.localStorage.setItem('taskAssignees', JSON.stringify(map))
+    } catch {
+      // ignore
+    }
+  }
+
+  function persistProjectTeams(projectsList) {
+    try {
+      const map = {}
+      projectsList.forEach((p) => {
+        if (Array.isArray(p.team) && p.team.length) {
+          map[p.id] = p.team
+        }
+      })
+      window.localStorage.setItem('projectTeams', JSON.stringify(map))
+    } catch {
+      // ignore
+    }
+  }
+
+  function persistTeamMembers(members) {
+    try {
+      window.localStorage.setItem('teamMembers', JSON.stringify(members))
+    } catch {
+      // ignore
+    }
+  }
+
+  async function loadData() {
+    try {
+      const userId = authUser?.id
+      const [proj, t] = await Promise.all([
+        fetchProjects(userId),
+        fetchTasks(userId),
+      ])
+      const teamByProject = loadProjectTeams()
+      const taskAssignees = loadTaskAssignees()
+      const completedByProject = new Map()
+      t.forEach((task) => {
+        const info = completedByProject.get(task.projectId) || { total: 0, done: 0 }
+        info.total += 1
+        if (task.status === 'completed') info.done += 1
+        completedByProject.set(task.projectId, info)
+      })
+
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      setProjects(
+        proj.map((p) => {
+          const info = completedByProject.get(p.id)
+          const total = info?.total ?? 0
+          const done = info?.done ?? 0
+          const allCompleted = total > 0 && done === total
+
+          const due = new Date(p.dueDate)
+          due.setHours(0, 0, 0, 0)
+          const isOverdue = !allCompleted && due < today
+
+          let uiStatus
+          if (isOverdue) {
+            uiStatus = 'overdue'
+          } else if (allCompleted) {
+            uiStatus = 'completed'
+          } else {
+            uiStatus = 'active'
+          }
+
+          return { ...p, status: uiStatus, team: teamByProject[p.id] ?? [] }
+        }),
+      )
+
+      setTasks(
+        t.map((task) =>
+          normalizeTask({ ...task, assigneeId: taskAssignees[task.id] ?? task.assigneeId }),
+        ),
+      )
+    } catch (err) {
+      console.error('Failed to load data', err)
+    }
+  }
+
+  useEffect(() => {
+    if (authUser) {
+      loadData()
+    }
+  }, [authUser])
 
   const stats = useMemo(() => {
     const totalProjects = projects.length
     const totalTasks = tasks.length
 
-    const inProgress = projects.filter(
-      (project) => project.tasksCompleted > 0 && project.tasksCompleted < project.tasksTotal,
-    ).length
+    let inProgress = 0
+    let projectsCompleted = 0
 
-    const completed = projects.filter(
-      (project) => project.tasksCompleted === project.tasksTotal && project.tasksTotal > 0,
-    ).length
+    projects.forEach((project) => {
+      const projectTasks = tasks.filter((t) => t.projectId === project.id)
+      const total = projectTasks.length
+      const done = projectTasks.filter((t) => t.status === 'completed').length
+
+      if (total > 0 && done === total) {
+        projectsCompleted += 1
+      } else if (total > 0 && done > 0 && done < total) {
+        inProgress += 1
+      }
+    })
 
     const overdue = tasks.filter((task) => task.status === 'overdue').length
 
-    return { totalProjects, totalTasks, inProgress, completed, overdue }
+    const tasksCompleted = tasks.filter((task) => task.status === 'completed').length
+    return { totalProjects, totalTasks, inProgress, completed: projectsCompleted, overdue, projectCompleted: projectsCompleted, taskCompleted: tasksCompleted }
   }, [projects, tasks])
 
-  function handleCreateProject(input) {
+  async function handleCreateProject(input) {
     const name = input.name.trim()
     if (!name) return
-    const nextId = projects.length ? Math.max(...projects.map((p) => p.id)) + 1 : 1
-
-    const project = {
-      id: nextId,
+    const payload = {
       name,
-      description:
-        input.description.trim() || 'New project created from dashboard',
-      status: input.status || 'planning',
+      description: input.description.trim() || 'New project created from dashboard',
+      status: 'active',
       phase: 'planning',
-      dueDate: input.dueDate || new Date().toISOString().slice(0, 10),
-      tasksTotal: 0,
-      tasksCompleted: 0,
+      startDate: input.startDate || new Date().toISOString().slice(0, 10),
+      endDate: input.endDate || input.startDate || new Date().toISOString().slice(0, 10),
+      // Store end date as dueDate for backend
+      dueDate: input.endDate || input.startDate || new Date().toISOString().slice(0, 10),
+      progress: typeof input.progress === 'number' ? input.progress : 0,
+      ownerId: authUser?.id,
     }
-
-    setProjects((prev) => [...prev, project])
-    setIsProjectDialogOpen(false)
+    try {
+      const created = await createProject(payload)
+      setProjects((prev) => {
+        const next = [...prev, { ...created, tasksTotal: 0, tasksCompleted: 0, team: input.team || [] }]
+        persistProjectTeams(next)
+        return next
+      })
+      setIsProjectDialogOpen(false)
+      await loadData()
+    } catch (err) {
+      console.error('Failed to create project', err)
+    }
   }
 
   function handleEditProject(project) {
@@ -149,15 +234,54 @@ function App() {
     setIsProjectDialogOpen(true)
   }
 
-  function handleUpdateProject(updated) {
-    setProjects((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)))
-    setIsProjectDialogOpen(false)
-    setEditingProject(null)
+  async function handleUpdateProject(updated) {
+    try {
+      const payload = {
+        name: updated.name.trim(),
+        description: updated.description.trim(),
+        startDate: updated.startDate,
+        endDate: updated.endDate,
+        // keep backend dueDate in sync with end date (or start date fallback)
+        dueDate: updated.endDate || updated.startDate || new Date().toISOString().slice(0, 10),
+      }
+			await updateProject(updated.id, payload)
+      setProjects((prev) => {
+        const next = prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
+        persistProjectTeams(next)
+        return next
+      })
+      setIsProjectDialogOpen(false)
+      setEditingProject(null)
+      await loadData()
+    } catch (err) {
+      console.error('Failed to update project', err)
+    }
   }
 
-  function handleDeleteProject(project) {
+  async function handleDeleteProject(project) {
     if (window.confirm('Are you sure you want to delete this project?')) {
-      setProjects((prev) => prev.filter((p) => p.id !== project.id))
+      try {
+        await deleteProject(project.id)
+        setProjects((prev) => {
+          const next = prev.filter((p) => p.id !== project.id)
+          persistProjectTeams(next)
+          return next
+        })
+        setTasks((prev) => {
+          const remaining = prev.filter((t) => t.projectId !== project.id)
+          const map = loadTaskAssignees()
+          prev.forEach((t) => {
+            if (t.projectId === project.id) {
+              delete map[t.id]
+            }
+          })
+          persistTaskAssignees(map)
+          return remaining
+        })
+        await loadData()
+      } catch (err) {
+        console.error('Failed to delete project', err)
+      }
     }
   }
 
@@ -166,26 +290,36 @@ function App() {
     setActiveTab('projectTasks')
   }
 
-  function handleCreateTask(input) {
+  async function handleCreateTask(input) {
     const title = input.title.trim()
     if (!title) return
-
-    const nextId = tasks.length ? Math.max(...tasks.map((task) => task.id)) + 1 : 1
-
-    const task = {
-      id: nextId,
+    const payload = {
       title,
       description: input.description || '',
       projectId: input.projectId,
       dueDate: input.dueDate || new Date().toISOString().slice(0, 10),
       status: input.status || 'open',
       priority: input.priority || 'medium',
-      assigneeId: input.assigneeId,
+			assigneeId: input.assigneeId ? Number(input.assigneeId) : undefined,
     }
-
-    setTasks((prev) => [...prev, task])
-    setIsTaskDialogOpen(false)
-    setEditingTask(null)
+    try {
+      const created = await createTask(payload)
+      const localTask = normalizeTask({ ...created, assigneeId: payload.assigneeId })
+      setTasks((prev) => {
+        const next = [...prev, localTask]
+        const map = loadTaskAssignees()
+        if (payload.assigneeId) {
+          map[localTask.id] = payload.assigneeId
+          persistTaskAssignees(map)
+        }
+        return next
+      })
+      setIsTaskDialogOpen(false)
+      setEditingTask(null)
+      await loadData()
+    } catch (err) {
+      console.error('Failed to create task', err)
+    }
   }
 
   function handleEditTask(task) {
@@ -193,10 +327,150 @@ function App() {
     setIsTaskDialogOpen(true)
   }
 
-  function handleUpdateTask(updated) {
-    setTasks((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)))
-    setIsTaskDialogOpen(false)
-    setEditingTask(null)
+  async function handleUpdateTask(updated) {
+    try {
+      await updateTask(updated.id, updated)
+      setTasks((prev) => {
+        const next = prev.map((t) => (t.id === updated.id ? normalizeTask({ ...t, ...updated }) : t))
+        const map = loadTaskAssignees()
+        if (updated.assigneeId) {
+          map[updated.id] = Number(updated.assigneeId)
+        } else {
+          delete map[updated.id]
+        }
+        persistTaskAssignees(map)
+        return next
+      })
+      setIsTaskDialogOpen(false)
+      setEditingTask(null)
+      await loadData()
+    } catch (err) {
+      console.error('Failed to update task', err)
+    }
+  }
+
+  function handleAddTeamMember(input) {
+    const name = (input?.name || '').trim()
+    if (!name) return
+    const role = (input?.role || '').trim() || 'Member'
+    const nextId = teamMembers.length ? Math.max(...teamMembers.map((m) => m.id)) + 1 : 1
+    const avatar = input?.avatar && input.avatar.trim()
+      ? input.avatar.trim()
+      : `https://ui-avatars.com/api/?background=0D8ABC&color=fff&name=${encodeURIComponent(name)}`
+    const member = { id: nextId, name, role, avatar }
+    const next = [...teamMembers, member]
+    setTeamMembers(next)
+    persistTeamMembers(next)
+  }
+
+  function handleUpdateTeamMember(input) {
+    const id = input?.id
+    const name = (input?.name || '').trim()
+    if (!id || !name) return
+    const role = (input?.role || '').trim() || 'Member'
+    setTeamMembers((prev) => {
+      const next = prev.map((m) => (m.id === id ? { ...m, name, role } : m))
+      persistTeamMembers(next)
+      return next
+    })
+  }
+
+  function handleDeleteTeamMember(id) {
+    if (!window.confirm('Remove this team member from the workspace?')) return
+    setTeamMembers((prev) => {
+      const next = prev.filter((m) => m.id !== id)
+      persistTeamMembers(next)
+      return next
+    })
+
+    setProjects((prev) => {
+      const next = prev.map((p) =>
+        Array.isArray(p.team)
+          ? { ...p, team: p.team.filter((mid) => mid !== id) }
+          : p,
+      )
+      persistProjectTeams(next)
+      return next
+    })
+
+    setTasks((prev) => {
+      const next = prev.map((t) =>
+        t.assigneeId === id ? { ...t, assigneeId: undefined } : t,
+      )
+      const map = loadTaskAssignees()
+      Object.keys(map).forEach((taskId) => {
+        if (Number(map[taskId]) === id) {
+          delete map[taskId]
+        }
+      })
+      persistTaskAssignees(map)
+      return next
+    })
+  }
+
+  async function handleToggleTaskCompleted(task) {
+    const nextStatus = task.status === 'completed' ? 'todo' : 'completed'
+    const payload = {
+      ...task,
+      status: nextStatus,
+    }
+
+    try {
+      await updateTask(task.id, payload)
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id
+            ? normalizeTask({ ...t, status: nextStatus })
+            : t,
+        ),
+      )
+      await loadData()
+    } catch (err) {
+      console.error('Failed to toggle task completion', err)
+    }
+  }
+
+  async function handleDeleteTask(task) {
+    if (!window.confirm('Are you sure you want to delete this task?')) return
+    try {
+      await deleteTask(task.id)
+      setTasks((prev) => {
+        const next = prev.filter((t) => t.id !== task.id)
+        const map = loadTaskAssignees()
+        delete map[task.id]
+        persistTaskAssignees(map)
+        return next
+      })
+      await loadData()
+    } catch (err) {
+      console.error('Failed to delete task', err)
+    }
+  }
+
+  async function handleUpdateAccount(fields) {
+    if (!authUser) return
+    try {
+      const updated = await updateAccount(authUser.id, fields)
+      setAuthUser(updated)
+      try {
+        window.localStorage.setItem('authUser', JSON.stringify(updated))
+      } catch {
+        // ignore
+      }
+      setIsAccountDialogOpen(false)
+    } catch (err) {
+      console.error('Failed to update account', err)
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (!authUser) return
+    try {
+      await deleteAccount(authUser.id)
+    } catch (err) {
+      console.error('Failed to delete account', err)
+    }
+    handleLogout()
   }
 
   function backToProjects() {
@@ -243,7 +517,7 @@ function App() {
 
   const projectTasks = useMemo(() => {
     if (!selectedProjectId) return []
-    const base = tasks.filter((t) => t.projectId === selectedProjectId && t.status !== 'completed')
+    const base = tasks.filter((t) => t.projectId === selectedProjectId)
     const q = projectTaskSearch.trim().toLowerCase()
     const searched = q ? base.filter((t) => `${t.title}`.toLowerCase().includes(q)) : base
     if (projectStatusFilter === 'all') return searched
@@ -255,11 +529,33 @@ function App() {
     return statusFiltered.filter((t) => (t.priority || 'medium') === projectPriorityFilter)
   }, [tasks, selectedProjectId, projectTaskSearch, projectStatusFilter, projectPriorityFilter])
 
+  function handleAuthenticated(user) {
+    setAuthUser(user)
+    try {
+      window.localStorage.setItem('authUser', JSON.stringify(user))
+    } catch {
+      // ignore storage errors
+    }
+    // Load data for this user
+    loadData()
+  }
+
+  function handleLogout() {
+    setAuthUser(null)
+    setProjects([])
+    setTasks([])
+    try {
+      window.localStorage.removeItem('authUser')
+    } catch {
+      // ignore storage errors
+    }
+  }
+
   if (!isAuthenticated) {
     return (
       <AuthPage
         initialMode="signin"
-        onAuthenticated={() => setIsAuthenticated(true)}
+        onAuthenticated={handleAuthenticated}
       />
     )
   }
@@ -269,7 +565,7 @@ function App() {
 
   return (
     <div className={`app-zoom min-h-screen bg-white ${bgClass} text-slate-900`}>
-      <div className="mx-auto max-w-6xl px-6 pb-12 pt-8">
+      <div className="mx-auto max-w-7xl px-4 pb-12 pt-8">
         <header className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
@@ -280,6 +576,30 @@ function App() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {authUser && (
+              <div className="flex items-center gap-2 rounded-full bg-white/70 px-3 py-1 shadow-sm border border-slate-200">
+                <span className="text-[11px] text-slate-500">
+                  Welcome,
+                  {' '}
+                  <span className="font-semibold text-slate-900">{authUser.name}</span>
+                </span>
+                <span className="h-4 w-px bg-slate-200" />
+                <button
+                  type="button"
+                  onClick={() => setIsAccountDialogOpen(true)}
+                  className="rounded-full px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+                >
+                  Account
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="rounded-full px-2 py-0.5 text-[11px] font-medium text-rose-600 hover:bg-rose-50"
+                >
+                  Sign Out
+                </button>
+              </div>
+            )}
             <button
             type="button"
             onClick={() => setIsProjectDialogOpen(true)}
@@ -297,7 +617,9 @@ function App() {
             onClick={() => setActiveTab('dashboard')}
             className={`inline-flex items-center gap-2 rounded-full px-3 py-1 font-medium ${activeTab === 'dashboard' ? 'bg-black text-white' : 'bg-white text-black border border-black'}`}
           >
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-black text-[11px]">
+            <span
+              className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] ${activeTab === 'dashboard' ? 'bg-black' : 'bg-transparent'}`}
+            >
               ⌘
             </span>
             Dashboard
@@ -365,7 +687,7 @@ function App() {
                 </h2>
                 <button
                   type="button"
-                  onClick={() => setIsTaskDialogOpen(true)}
+                  onClick={() => { setEditingTask(null); setIsTaskDialogOpen(true); }}
                   className="rounded-full border border-black px-3 py-1 text-xs font-medium text-black hover:bg-emerald-50"
                 >
                   + New Task
@@ -374,12 +696,15 @@ function App() {
               <div className="space-y-3">
                 {upcomingDeadlines.map((task) => {
                   const project = projectsById.get(task.projectId)
+                  const assignee = task.assigneeId ? teamMembers.find((m) => m.id === task.assigneeId) : null
                   return (
                     <TaskItem
                       key={task.id}
                       task={task}
                       projectName={project ? project.name : ''}
                       formatDate={formatDate}
+                      assignee={assignee || undefined}
+                      onToggleComplete={() => handleToggleTaskCompleted(task)}
                     />
                   )
                 })}
@@ -403,8 +728,11 @@ function App() {
             formatDate={formatDate}
             searchTerm={taskSearch}
             onSearchChange={setTaskSearch}
-            onNewTask={() => setIsTaskDialogOpen(true)}
+            onNewTask={() => { setEditingTask(null); setIsTaskDialogOpen(true); }}
             onEditTask={handleEditTask}
+            onDeleteTask={handleDeleteTask}
+            onToggleTaskComplete={handleToggleTaskCompleted}
+            teamMembers={teamMembers}
           />
         ) : activeTab === 'projectTasks' && selectedProject ? (
           <ProjectTasksView
@@ -418,8 +746,11 @@ function App() {
             onStatusChange={setProjectStatusFilter}
             priorityFilter={projectPriorityFilter}
             onPriorityChange={setProjectPriorityFilter}
-            onNewTask={() => setIsTaskDialogOpen(true)}
+            onNewTask={() => { setEditingTask(null); setIsTaskDialogOpen(true); }}
             onEditTask={handleEditTask}
+            onDeleteTask={handleDeleteTask}
+            onToggleTaskComplete={handleToggleTaskCompleted}
+            teamMembers={teamMembers}
             onBack={backToProjects}
           />
         ) : null}
@@ -429,14 +760,27 @@ function App() {
         onClose={() => { setIsProjectDialogOpen(false); setEditingProject(null); }}
         onCreate={editingProject ? handleUpdateProject : handleCreateProject}
         editingProject={editingProject}
+        allMembers={teamMembers}
+        onAddMember={handleAddTeamMember}
+        onUpdateMember={handleUpdateTeamMember}
+        onDeleteMember={handleDeleteTeamMember}
       />
       <TaskDialog
         isOpen={isTaskDialogOpen}
-        onClose={() => setIsTaskDialogOpen(false)}
+        onClose={() => { setIsTaskDialogOpen(false); setEditingTask(null); }}
         onCreate={handleCreateTask}
         onUpdate={handleUpdateTask}
         editingTask={editingTask}
         projects={projects}
+        defaultProjectId={selectedProjectId}
+        teamMembers={teamMembers}
+      />
+      <AccountDialog
+        isOpen={isAccountDialogOpen}
+        onClose={() => setIsAccountDialogOpen(false)}
+        user={authUser}
+        onUpdate={handleUpdateAccount}
+        onDelete={handleDeleteAccount}
       />
     </div>
   )

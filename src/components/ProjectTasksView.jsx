@@ -1,5 +1,4 @@
 import TaskItem from './TaskItem'
-import { TEAM_MEMBERS } from './teamMembers'
 
 function ProgressBar({ completed, total }) {
   const percent = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0
@@ -18,17 +17,20 @@ function ProgressBar({ completed, total }) {
 
 function StatusBadge({ status }) {
   const map = {
-    planning: 'bg-slate-900 text-white',
-    active: 'bg-emerald-600 text-white',
-    completed: 'bg-slate-200 text-slate-800',
+    active: 'bg-blue-100 text-blue-700',
+    completed: 'bg-emerald-600 text-white',
+    overdue: 'bg-red-100 text-red-700',
   }
   const cls = map[status] || 'bg-slate-100 text-slate-700'
   return <span className={`rounded-full px-2 py-[3px] text-[11px] font-medium ${cls}`}>{status}</span>
 }
 
-function ProjectTasksView({ project, tasks, projectsById, formatDate, searchTerm, statusFilter, priorityFilter, onSearchChange, onStatusChange, onPriorityChange, onNewTask, onEditTask, onBack }) {
-  const visibleTasks = tasks.filter((t) => t.status !== 'completed')
+function ProjectTasksView({ project, tasks, projectsById, formatDate, searchTerm, statusFilter, priorityFilter, onSearchChange, onStatusChange, onPriorityChange, onNewTask, onEditTask, onDeleteTask, onBack, onToggleTaskComplete, teamMembers }) {
+  const visibleTasks = tasks.slice()
   const q = searchTerm.trim().toLowerCase()
+
+  const totalTasks = visibleTasks.length
+  const completedTasks = visibleTasks.filter((t) => t.status === 'completed').length
 
   const matchQuery = (t) => !q || `${t.title}`.toLowerCase().includes(q)
   const matchStatus = (t) => {
@@ -71,7 +73,7 @@ function ProjectTasksView({ project, tasks, projectsById, formatDate, searchTerm
         ) : null}
       </div>
 
-      <ProgressBar completed={project.tasksCompleted || 0} total={project.tasksTotal || visibleTasks.length} />
+      <ProgressBar completed={completedTasks} total={totalTasks} />
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
         <div className="sm:col-span-2 w-full rounded-xl border border-transparent bg-slate-100 px-4 py-2.5 text-sm text-slate-700 shadow-sm focus-within:border-slate-300 focus-within:bg-white">
@@ -114,9 +116,15 @@ function ProjectTasksView({ project, tasks, projectsById, formatDate, searchTerm
           .filter(matchQuery)
           .filter(matchStatus)
           .filter(matchPriority)
+          .sort((a, b) => {
+            const aDone = a.status === 'completed'
+            const bDone = b.status === 'completed'
+            if (aDone === bDone) return 0
+            return aDone ? 1 : -1
+          })
           .map((task) => {
             const projectForTask = projectsById.get(task.projectId)
-            const assignee = task.assigneeId ? TEAM_MEMBERS.find(m => m.id === task.assigneeId) : null
+            const assignee = task.assigneeId ? teamMembers?.find(m => m.id === task.assigneeId) : null
             return (
               <TaskItem
                 key={task.id}
@@ -125,6 +133,8 @@ function ProjectTasksView({ project, tasks, projectsById, formatDate, searchTerm
                 formatDate={formatDate}
                 assignee={assignee || undefined}
                 onEdit={() => onEditTask?.(task)}
+                onDelete={onDeleteTask ? () => onDeleteTask(task) : undefined}
+                onToggleComplete={onToggleTaskComplete ? () => onToggleTaskComplete(task) : undefined}
               />
             )
           })}
