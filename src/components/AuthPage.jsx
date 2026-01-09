@@ -1,21 +1,52 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { signUp, signIn } from '../api/client'
 
 function AuthPage({ initialMode = 'signin', onAuthenticated }) {
   const [mode, setMode] = useState(initialMode)
   const [form, setForm] = useState({ name: '', email: '', password: '' })
-  const [error, setError] = useState('')
+  const [errors, setErrors] = useState({ name: '', email: '', password: '', general: '' })
 
   const { name, email, password } = form
   const isSignIn = mode === 'signin'
 
+  // Clear errors when switching between sign-in and sign-up
+  useEffect(() => {
+    setErrors({ name: '', email: '', password: '', general: '' })
+    setForm({ name: '', email: '', password: '' })
+  }, [mode])
+
   const inputClass = 'auth-input w-full rounded-full border border-slate-300 px-5 py-3.5 text-base text-slate-800 shadow-sm outline-none focus:border-emerald-500'
 
-  const onField = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
+  const onField = (field) => (e) => {
+    setForm((prev) => ({ ...prev, [field]: e.target.value }))
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: '' }))
+    }
+  }
 
   async function handleSubmit(event) {
     event.preventDefault()
-    if (!email.trim() || !password.trim()) return
+    
+    // Reset all errors
+    setErrors({ name: '', email: '', password: '', general: '' })
+    
+    // Validate all required fields
+    const newErrors = {}
+    
+    if (!isSignIn && !name.trim()) {
+      newErrors.name = 'Username is required'
+    }
+    if (!email.trim()) {
+      newErrors.email = 'Email is required'
+    }
+    if (!password.trim()) {
+      newErrors.password = 'Password is required'
+    }
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(prev => ({ ...prev, ...newErrors }))
+      return
+    }
 
     if (isSignIn) {
       try {
@@ -23,12 +54,12 @@ function AuthPage({ initialMode = 'signin', onAuthenticated }) {
           email: email.trim(),
           passwordHash: password,
         })
-        setError('')
+        setErrors({ name: '', email: '', password: '', general: '' })
         onAuthenticated?.({ mode, ...user })
       } catch (err) {
         console.error('Sign in failed', err)
         // Extract the specific error message from the backend
-        setError(err.message || 'Sign in failed')
+        setErrors(prev => ({ ...prev, general: err.message || 'Sign in failed' }))
       }
     } else {
       try {
@@ -37,11 +68,11 @@ function AuthPage({ initialMode = 'signin', onAuthenticated }) {
           email: email.trim(),
           passwordHash: password, // or send plain and hash on backend
         })
-        setError('')
+        setErrors({ name: '', email: '', password: '', general: '' })
         onAuthenticated?.({ mode, ...user })
       } catch (err) {
         console.error('Sign up failed', err)
-        setError('Could not create account')
+        setErrors(prev => ({ ...prev, general: 'Could not create account' }))
       }
     }
   }
@@ -66,35 +97,42 @@ function AuthPage({ initialMode = 'signin', onAuthenticated }) {
                 <div>
                   <input
                     type="text"
-                    placeholder="Username"
+                    placeholder="Username *"
                     value={name}
                     onChange={onField('name')}
                     className={inputClass}
                   />
+                  {errors.name && (
+                    <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+                  )}
                 </div>
               )}
-              {error && (
-                <p className="text-sm text-red-600 text-center">{error}</p>
+              {errors.general && (
+                <p className="text-sm text-red-600 text-center">{errors.general}</p>
               )}
               <div>
                 <input
                   type="email"
-                  placeholder="Email Address"
+                  placeholder={isSignIn ? "Email Address" : "Email Address *"}
                   value={email}
                   onChange={onField('email')}
                   className={inputClass}
-                  required
                 />
+                {errors.email && (
+                  <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                )}
               </div>
               <div>
                 <input
                   type="password"
-                  placeholder="Password"
+                  placeholder={isSignIn ? "Password" : "Password *"}
                   value={password}
                   onChange={onField('password')}
                   className={inputClass}
-                  required
                 />
+                {errors.password && (
+                  <p className="mt-1 text-sm text-red-600">{errors.password}</p>
+                )}
               </div>
               <div className="pt-4 text-center">
                 <button
