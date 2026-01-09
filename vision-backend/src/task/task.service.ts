@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -13,7 +13,17 @@ function mapUiStatusToDb(status: string | undefined) {
 export class TaskService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(data: CreateTaskDto) {
+  async create(data: CreateTaskDto) {
+    // Prevent duplicate task titles within the same project
+    const existing = await this.prisma.task.findFirst({
+      where: {
+        title: data.title,
+        projectId: data.projectId,
+      },
+    });
+    if (existing) {
+      throw new BadRequestException('A task with this title already exists in this project. Please choose a different title.');
+    }
     return this.prisma.task.create({
       data: {
         title: data.title,

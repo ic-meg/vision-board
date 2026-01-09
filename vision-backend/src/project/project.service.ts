@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
@@ -7,7 +7,17 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 export class ProjectService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(data: CreateProjectDto) {
+  async create(data: CreateProjectDto) {
+    // Prevent duplicate project names for the same owner
+    const existing = await this.prisma.project.findFirst({
+      where: {
+        name: data.name,
+        ownerId: data.ownerId ?? null,
+      },
+    });
+    if (existing) {
+      throw new BadRequestException('A project with this name already exists. Please choose a different name.');
+    }
     return this.prisma.project.create({
       data: {
         name: data.name,
@@ -54,7 +64,17 @@ export class ProjectService {
     });
   }
 
-  remove(id: number) {
+  async remove(id: number) {
+    // Check for incomplete tasks before deleting the project
+    const incompleteTasks = await this.prisma.task.findFirst({
+      where: {
+        projectId: id,
+        NOT: { status: 'completed' },
+      },
+    });
+    if (incompleteTasks) {
+      throw new BadRequestException('Cannot delete project with incomplete tasks. Complete all tasks first.');
+    }
     // Delete related tasks first to satisfy FK constraints, then the project
     return this.prisma.$transaction([
       this.prisma.task.deleteMany({ where: { projectId: id } }),
