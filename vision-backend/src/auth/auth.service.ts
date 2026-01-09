@@ -2,20 +2,24 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class AuthService {
 	constructor(private readonly prisma: PrismaService) {}
 
 	async create(data: CreateUserDto) {
+		const plain = data.passwordHash ?? null
+		const hashedPassword = plain ? await bcrypt.hash(plain, 10) : null
+
 		const user = await this.prisma.user.create({
 			data: {
 				name: data.name,
 				email: data.email,
-				passwordHash: data.passwordHash ?? null,
+				passwordHash: hashedPassword,
 			},
 		});
-		const { passwordHash, ...safe } = user;
+		const { passwordHash: _ph, ...safe } = user;
 		return safe;
 	}
 
@@ -36,23 +40,31 @@ export class AuthService {
 		if (!user) {
 			throw new UnauthorizedException('No account found with this email');
 		}
-		if (user.passwordHash !== password) {
+		if (!user.passwordHash) {
+			throw new UnauthorizedException('Account does not have a password set');
+		}
+		const match = await bcrypt.compare(password, user.passwordHash)
+		if (!match) {
 			throw new UnauthorizedException('Incorrect password');
 		}
-		const { passwordHash, ...safe } = user;
+		const { passwordHash: _ph, ...safe } = user;
 		return safe;
 	}
 
 	async update(id: number, data: UpdateUserDto) {
+		let hashed = data.passwordHash
+		if (hashed) {
+			hashed = await bcrypt.hash(hashed, 10)
+		}
 		const user = await this.prisma.user.update({
 			where: { id },
 			data: {
 				name: data.name,
 				email: data.email,
-				passwordHash: data.passwordHash,
+				passwordHash: hashed,
 			},
 		});
-		const { passwordHash, role, avatar, ...safe } = user;
+		const { passwordHash: _ph, role, avatar, ...safe } = user;
 		return safe;
 	}
 
@@ -68,7 +80,7 @@ export class AuthService {
 			// Finally delete the user
 			this.prisma.user.delete({ where: { id } }),
 		]);
-		const { passwordHash, ...safe } = user as any;
+		const { passwordHash: _ph, ...safe } = user as any;
 		return safe;
 	}
 }
