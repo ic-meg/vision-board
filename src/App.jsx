@@ -11,6 +11,8 @@ import ProjectDialog from './components/ProjectDialog'
 import TaskDialog from './components/TaskDialog'
 import AccountDialog from './components/AccountDialog'
 import { fetchProjects, fetchTasks, createProject, updateProject, deleteProject, createTask, updateTask, deleteTask, updateAccount, deleteAccount } from './api/client'
+import useToast from './hooks/useToast'
+import Toast from './components/Toast'
 import { TEAM_MEMBERS as DEFAULT_TEAM_MEMBERS } from './components/teamMembers'
 
 function normalizeTask(task) {
@@ -205,7 +207,7 @@ function App() {
     if (!name) return
     const payload = {
       name,
-      description: input.description.trim() || 'New project created from dashboard',
+      description: input.description.trim(),
       status: 'active',
       phase: 'planning',
       startDate: input.startDate || new Date().toISOString().slice(0, 10),
@@ -226,6 +228,7 @@ function App() {
       await loadData()
     } catch (err) {
       console.error('Failed to create project', err)
+      throw err; 
     }
   }
 
@@ -258,8 +261,11 @@ function App() {
     }
   }
 
+  const [deleteProjectError, setDeleteProjectError] = useState('');
+  const toast = useToast()
   async function handleDeleteProject(project) {
     if (window.confirm('Are you sure you want to delete this project?')) {
+      setDeleteProjectError('');
       try {
         await deleteProject(project.id)
         setProjects((prev) => {
@@ -280,6 +286,12 @@ function App() {
         })
         await loadData()
       } catch (err) {
+        const msg = err?.message || err?.toString() || '';
+        if (msg.includes('incomplete tasks')) {
+          toast.show('Cannot delete project with incomplete tasks. Complete all tasks first.', 'error')
+        } else {
+          toast.show('Failed to delete project.', 'error')
+        }
         console.error('Failed to delete project', err)
       }
     }
@@ -319,6 +331,7 @@ function App() {
       await loadData()
     } catch (err) {
       console.error('Failed to create task', err)
+      throw err; // Propagate error to TaskDialog for UI display
     }
   }
 
@@ -565,6 +578,12 @@ function App() {
 
   return (
     <div className={`app-zoom min-h-screen bg-white ${bgClass} text-slate-900`}>
+      {/* Toast container (top-right) */}
+      <div className="fixed right-4 top-4 z-50 flex flex-col items-end pointer-events-none">
+        {toast.toasts.map((t) => (
+          <Toast key={t.id} id={t.id} message={t.message} type={t.type} onClose={toast.remove} />
+        ))}
+      </div>
       <div className="mx-auto max-w-7xl px-4 pb-12 pt-8">
         <header className="mb-8 flex items-center justify-between">
           <div>
@@ -654,6 +673,9 @@ function App() {
               <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
                 Recent Projects
               </h2>
+              {deleteProjectError && (
+                <div className="mb-2 text-center text-sm text-red-600 font-medium">{deleteProjectError}</div>
+              )}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {projects.slice(0, 3).map((project) => (
                   <ProjectCard
