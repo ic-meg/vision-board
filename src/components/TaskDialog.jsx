@@ -11,7 +11,7 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
     dueDate: '',
   })
 
-  const [error, setError] = useState('')
+  const [errors, setErrors] = useState({ title: '', projectId: '', dueDate: '', general: '' })
 
   useEffect(() => {
     if (!isOpen) {
@@ -24,7 +24,7 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
         projectId: defaultProjectId ?? projects[0]?.id ?? '',
         dueDate: '',
       })
-      setError('')
+      setErrors((prev) => ({ ...prev, general: '' }))
       return
     }
     if (editingTask) {
@@ -48,7 +48,7 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
         projectId: defaultProjectId ?? projects[0]?.id ?? '',
         dueDate: '',
       })
-      setError('')
+      setErrors((prev) => ({ ...prev, general: '' }))
     }
   }, [isOpen, projects, editingTask, defaultProjectId])
 
@@ -56,27 +56,65 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
 
   const { title, description, status, priority, assigneeId, projectId, dueDate, id } = form
   const inputClass = 'mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-900'
-  const onField = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
+  const onField = (field) => (e) => {
+    const value = e.target.value
+    setForm((prev) => ({ ...prev, [field]: value }))
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: '' }))
+    }
+    // Clear combined/general error when user types
+    if (errors.general) {
+      setErrors((prev) => ({ ...prev, general: '' }))
+    }
+  }
   const isEdit = !!editingTask
 
   const selectedProject = projects.find((p) => p.id === Number(projectId))
   const availableAssignees = teamMembers || []
 
-  function handleSubmit(event) {
+  // Compute uli todays date
+  const getLocalToday = () => {
+    const d = new Date()
+    const tzOffset = d.getTimezoneOffset()
+    const local = new Date(d.getTime() - tzOffset * 60000)
+    return local.toISOString().split('T')[0]
+  }
+
+  const today = getLocalToday()
+  const minDate = (() => {
+    // if editing and the existing dueDate is in the past, allow keeping it
+    if (isEdit && dueDate) {
+      return dueDate < today ? dueDate : today
+    }
+    return today
+  })()
+
+  async function handleSubmit(event) {
     event.preventDefault()
-    if (!title.trim() || !projectId) return
+    // Reset field errors
+    setErrors({ title: '', projectId: '', dueDate: '', general: '' })
+
+    const newErrors = {}
+    if (!title.trim()) newErrors.title = 'Task title is required'
+    if (!projectId) newErrors.projectId = 'Project is required'
+    if (!dueDate) newErrors.dueDate = 'Deadline is required'
+
+    if (Object.keys(newErrors).length > 0) {
+      // show per-field errors 
+      const combined = Object.values(newErrors).join(', ')
+      setErrors((prev) => ({ ...prev, ...newErrors, general: combined }))
+      return
+    }
 
     if (selectedProject && dueDate) {
       const projectDeadline = selectedProject.dueDate
         ? String(selectedProject.dueDate).slice(0, 10)
         : ''
-      if (projectDeadline && dueDate > projectDeadline) {
-        setError('Task deadline cannot be after the project deadline.')
+      if (projectDeadline && dueDate >= projectDeadline) {
+        setErrors((prev) => ({ ...prev, dueDate: 'Task deadline must be before the project deadline.' }))
         return
       }
     }
-
-    setError('')
     const payload = {
       id,
       title: title.trim(),
@@ -87,7 +125,26 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
       projectId: Number(projectId),
       dueDate,
     }
-    if (isEdit) onUpdate?.(payload); else onCreate(payload)
+    try {
+      if (isEdit) {
+        await onUpdate?.(payload)
+      } else {
+        await onCreate(payload)
+      }
+    } catch (err) {
+      const msg = err?.message || err?.toString() || ''
+      if (msg.includes('already exists')) {
+        setErrors(prev => ({ ...prev, title: 'A task with this title already exists in this project.' }))
+      } else {
+        setErrors(prev => ({ ...prev, general: 'Failed to create task' }))
+      }
+    }
+  }
+
+  // Wrap onClose to also clear errors
+  const handleClose = () => {
+    setErrors({ title: '', projectId: '', dueDate: '', general: '' })
+    onClose()
   }
 
   return (
@@ -97,15 +154,15 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
         <p className="mt-1 text-xs text-slate-500">{isEdit ? 'Update task details and assignment' : 'Add a new task to the project'}</p>
         <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
           <div>
-            <label className="text-xs font-medium text-slate-700">Task Title</label>
+            <label className="text-xs font-medium text-slate-700">Task Title *</label>
             <input
               type="text"
               value={title}
               onChange={onField('title')}
               className={inputClass}
               placeholder="Enter task title"
-              required
             />
+            {errors.title && <p className="mt-1 text-sm text-red-600">{errors.title}</p>}
           </div>
 
           <div>
@@ -163,10 +220,14 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="text-xs font-medium text-slate-700">Project</label>
+              <label className="text-xs font-medium text-slate-700">Project *</label>
               <select
                 value={projectId}
-                onChange={(e) => setForm((prev) => ({ ...prev, projectId: e.target.value, assigneeId: '' }))}
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, projectId: e.target.value, assigneeId: '' }))
+                  if (errors.projectId) setErrors((prev) => ({ ...prev, projectId: '' }))
+                  if (errors.general) setErrors((prev) => ({ ...prev, general: '' }))
+                }}
                 className={inputClass}
               >
                 {projects.map((project) => (
@@ -177,24 +238,26 @@ function TaskDialog({ isOpen, onClose, onCreate, onUpdate, projects, editingTask
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-700">Deadline</label>
+              <label className="text-xs font-medium text-slate-700">Deadline *</label>
               <input
                 type="date"
                 value={dueDate}
                 onChange={onField('dueDate')}
                 className={inputClass}
+                min={minDate}
               />
+              {errors.dueDate && <p className="mt-1 text-sm text-red-600">{errors.dueDate}</p>}
             </div>
           </div>
 
-          {error && (
-            <p className="text-xs text-red-600 mt-1 text-right">{error}</p>
+          {errors.general && (
+            <p className="text-xs text-red-600 mt-1 text-right">{errors.general}</p>
           )}
 
           <div className="mt-4 flex justify-end gap-2 text-sm">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-700 hover:bg-slate-50"
             >
               Cancel

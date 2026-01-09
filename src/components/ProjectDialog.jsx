@@ -9,18 +9,25 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject, allMembers, 
     team: [],
   })
 
+  const [errors, setErrors] = useState({ name: '', endDate: '', general: '' })
   const [newMemberName, setNewMemberName] = useState('')
   const [newMemberRole, setNewMemberRole] = useState('')
   const [editingMemberId, setEditingMemberId] = useState(null)
 
   useEffect(() => {
     if (isOpen) {
+      setErrors({ name: '', endDate: '', general: '' })
       if (editingProject) {
+        // Ensure endDate is a valid YYYY-MM-DD string for input type="date"
+        let endDate = editingProject.endDate || ''
+        if (endDate && endDate.length > 10) {
+          endDate = String(endDate).slice(0, 10)
+        }
         setForm({
           name: editingProject.name || '',
           description: editingProject.description || '',
           startDate: editingProject.startDate || '',
-          endDate: editingProject.endDate || '',
+          endDate,
           id: editingProject.id,
           team: editingProject.team || [],
         })
@@ -34,7 +41,33 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject, allMembers, 
 
   const { name, description, startDate, endDate, team } = form
   const inputClass = 'mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-900'
-  const onField = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
+  const onField = (field) => (e) => {
+    setForm((prev) => ({ ...prev, [field]: e.target.value }))
+    //when user starts typing, this is where we clear the field 
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: '' }))
+    }
+  }
+
+  const isEdit = !!editingProject
+  
+
+  // Compute today's date in local YYYY-MM-DD format 
+  const getLocalToday = () => {
+    const d = new Date()
+    //apply time zone so we get the local araw
+    const tzOffset = d.getTimezoneOffset()
+    const local = new Date(d.getTime() - tzOffset * 60000)
+    return local.toISOString().split('T')[0]
+  }
+
+  const today = getLocalToday()
+  const minDate = (() => {
+    if (isEdit && endDate) {
+      return endDate < today ? endDate : today
+    }
+    return today
+  })()
 
   function handleToggleMember(id) {
     setForm((prev) => {
@@ -45,10 +78,41 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject, allMembers, 
     })
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
-    if (!form.name.trim()) return
-    onCreate(form)
+    
+    // Reset all errors
+    setErrors({ name: '', endDate: '', general: '' })
+    
+    // Validate all required fields
+    const newErrors = {}
+    if (!form.name.trim()) {
+      newErrors.name = 'Project name is required'
+    }
+    
+    if (!form.endDate && !isEdit) {
+      newErrors.endDate = 'Deadline is required'
+    }
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(prev => ({ ...prev, ...newErrors }))
+      return
+    }
+
+    try {
+      const result = onCreate(form);
+      if (result && typeof result.then === 'function') {
+        await result;
+      }
+      setErrors({ name: '', endDate: '', general: '' });
+    } catch (err) {
+      // Check for duplicate project name error from backend
+      const msg = err?.message || err?.toString() || '';
+      if (msg.includes('already exists')) {
+        setErrors(prev => ({ ...prev, name: 'A project with this name already exists.' }));
+      } else {
+        setErrors(prev => ({ ...prev, general: 'Failed to create project' }));
+      }
+    }
   }
 
   function handleAddMember() {
@@ -64,8 +128,6 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject, allMembers, 
     setNewMemberRole('')
     setEditingMemberId(null)
   }
-
-  const isEdit = !!editingProject
 
   return (
     <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/40 px-4">
@@ -86,17 +148,22 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject, allMembers, 
             ×
           </button>
         </div>
+        {errors.general && (
+          <p className="mt-2 text-sm text-red-600 text-center">{errors.general}</p>
+        )}
         <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
           <div>
-            <label className="text-xs font-medium text-slate-700">Project Name</label>
+            <label className="text-xs font-medium text-slate-700">Project Name *</label>
             <input
               type="text"
               value={name}
               onChange={onField('name')}
               className={inputClass}
               placeholder="e.g. New Website Launch"
-              required
             />
+            {errors.name && (
+              <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+            )}
           </div>
           <div>
             <label className="text-xs font-medium text-slate-700">Description</label>
@@ -112,12 +179,15 @@ function ProjectDialog({ isOpen, onClose, onCreate, editingProject, allMembers, 
             <label className="text-xs font-medium text-slate-700">Deadline *</label>
             <input
               type="date"
-              value={endDate}
+              value={endDate ? String(endDate).slice(0, 10) : ''}
               onChange={onField('endDate')}
               placeholder="mm/dd/yyyy"
               className={inputClass}
-              required
+              min={minDate}
             />
+            {errors.endDate && (
+              <p className="mt-1 text-sm text-red-600">{errors.endDate}</p>
+            )}
           </div>
           {/* Team member assignment UI */}
           <div>
